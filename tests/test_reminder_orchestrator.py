@@ -65,6 +65,29 @@ class FakeChannelServiceWithLedger:
         self.outcomes = list(outcomes)
         self.calls: list[dict] = []
 
+
+    def get_contact_point(
+        self,
+        resident: Resident,
+        channel: str,
+    ) -> str:
+        """Mirror the real ChannelService contact-point selection."""
+
+        channel = channel.lower().strip()
+
+        if channel == "sms":
+            return resident.mobile or ""
+
+        if channel == "email":
+            return resident.email or ""
+
+        if channel == "voice":
+            return resident.mobile or resident.landline or ""
+
+        raise ValueError(
+            f"Unsupported channel: {channel}"
+    )
+
     def send(
         self,
         resident: Resident,

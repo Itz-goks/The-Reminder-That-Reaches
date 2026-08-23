@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Iterable, Sequence
 
-from .channel_service import ChannelResult, ChannelService
+from .channel_service import ChannelService
+from .contact_dedup import ContactDeduplicator
 from .contact_policy import ContactPolicy
 from .models import Appointment, Resident
 
@@ -29,9 +30,10 @@ class ReminderOrchestrator:
     Responsibilities:
     - identify eligible appointments
     - ask ContactPolicy whether a channel is permitted
+    - prevent duplicate use of the same contact point in one run
     - execute the permitted channel through ChannelService
     - interpret the result through ChannelService
-    - perform controlled fallback when the resident was not reached
+    - perform controlled fallback when the resident is not reached
     - re-check policy before every fallback attempt
     """
 
@@ -46,18 +48,31 @@ class ReminderOrchestrator:
         channel_order: Sequence[str] = DEFAULT_CHANNEL_ORDER,
     ) -> None:
         if reminder_window <= timedelta(0):
-            raise ValueError("reminder_window must be greater than zero.")
+            raise ValueError(
+                "reminder_window must be greater than zero."
+            )
 
         if not channel_order:
-            raise ValueError("channel_order cannot be empty.")
+            raise ValueError(
+                "channel_order cannot be empty."
+            )
 
         self.policy = policy
-        self.channel_service = channel_service or ChannelService(policy.ledger)
+
+        self.channel_service = (
+            channel_service
+            if channel_service is not None
+            else ChannelService(policy.ledger)
+        )
+
         self.reminder_window = reminder_window
+
         self.channel_order = tuple(
             channel.lower().strip()
             for channel in channel_order
         )
+
+        self.deduplicator = ContactDeduplicator()
 
     def appointment_needs_reminder(
         self,
@@ -65,6 +80,7 @@ class ReminderOrchestrator:
         current_time: datetime,
     ) -> bool:
         """Return whether a booked appointment falls in the reminder window."""
+
         return (
             appointment.status.lower() == "booked"
             and current_time < appointment.scheduled_at
@@ -84,6 +100,11 @@ class ReminderOrchestrator:
         1. earliest appointment time
         2. appointment ID
         """
+
+        # Deduplication applies only to this processing run.
+        # The regulatory 2-in-7 ledger remains persistent separately.
+        self.deduplicator.clear()
+
         residents_by_id = {
             resident.resident_id: resident
             for resident in residents
@@ -106,9 +127,9 @@ class ReminderOrchestrator:
 
         return [
             self._process_appointment(
-                appointment,
-                residents_by_id,
-                current_time,
+                appointment=appointment,
+                residents_by_id=residents_by_id,
+                current_time=current_time,
             )
             for appointment in upcoming
         ]
@@ -119,7 +140,9 @@ class ReminderOrchestrator:
         residents_by_id: dict[str, Resident],
         current_time: datetime,
     ) -> ReminderResult:
-        resident = residents_by_id.get(appointment.resident_id)
+        resident = residents_by_id.get(
+            appointment.resident_id
+        )
 
         if resident is None:
             return ReminderResult(
@@ -127,13 +150,19 @@ class ReminderOrchestrator:
                 resident_id=appointment.resident_id,
                 attempted=False,
                 channel=None,
-                reason="No resident record found for appointment.",
+                reason=(
+                    "No resident record found for appointment."
+                ),
             )
 
         rejected_reasons: list[str] = []
         attempts_made = 0
+        last_channel: str | None = None
 
         for channel in self.channel_order:
+            # -------------------------------------------------
+            # 1. Central contact policy
+            # -------------------------------------------------
             decision = self.policy.evaluate(
                 resident,
                 channel,
@@ -146,7 +175,36 @@ class ReminderOrchestrator:
                 )
                 continue
 
+            # -------------------------------------------------
+            # 2. Resolve concrete contact point
+            # -------------------------------------------------
+            contact_point = (
+                self.channel_service.get_contact_point(
+                    resident=resident,
+                    channel=channel,
+                )
+            )
+
+            # -------------------------------------------------
+            # 3. Protect against duplicate contact points
+            #    during this processing run
+            # -------------------------------------------------
+            dedup_decision = self.deduplicator.check(
+                channel=channel,
+                contact_point=contact_point,
+            )
+
+            if not dedup_decision.allowed:
+                rejected_reasons.append(
+                    f"{channel}: {dedup_decision.reason}"
+                )
+                continue
+
+            # -------------------------------------------------
+            # 4. Actual outbound attempt
+            # -------------------------------------------------
             attempts_made += 1
+            last_channel = channel
 
             channel_result = self.channel_service.send(
                 resident=resident,
@@ -160,6 +218,17 @@ class ReminderOrchestrator:
                 attempt_number=attempts_made,
             )
 
+            # Record contact point in the current-run
+            # deduplication state only after the actual
+            # outbound call has happened.
+            self.deduplicator.record(
+                channel=channel,
+                contact_point=contact_point,
+            )
+
+            # -------------------------------------------------
+            # 5. Human reached → STOP
+            # -------------------------------------------------
             if channel_result.reached:
                 return ReminderResult(
                     appointment_id=appointment.appointment_id,
@@ -169,34 +238,47 @@ class ReminderOrchestrator:
                     reason=(
                         f"Resident reached via {channel}: "
                         f"{channel_result.status}"
-                        f"{' / ' + channel_result.detail if channel_result.detail else ''}"
+                        + (
+                            f" / {channel_result.detail}"
+                            if channel_result.detail
+                            else ""
+                        )
                     ),
                     reached=True,
                     attempts_made=attempts_made,
                 )
 
+            # -------------------------------------------------
+            # 6. Not reached → controlled fallback
+            # -------------------------------------------------
             rejected_reasons.append(
                 (
                     f"{channel}: not reached "
                     f"({channel_result.status}"
-                    f"{' / ' + channel_result.detail if channel_result.detail else ''})"
+                    + (
+                        f" / {channel_result.detail}"
+                        if channel_result.detail
+                        else ""
+                    )
+                    + ")"
                 )
             )
 
-            # The channel attempt has already been recorded by ChannelService.
-            # On the next loop iteration, ContactPolicy checks the updated
-            # rolling 2-in-7 ledger again before allowing another outbound attempt.
+            # The next iteration automatically calls
+            # ContactPolicy again. This re-checks the
+            # rolling 2-in-7 limit before another contact.
 
+        # -----------------------------------------------------
+        # No channel resulted in confirmed human reach
+        # -----------------------------------------------------
         return ReminderResult(
             appointment_id=appointment.appointment_id,
             resident_id=appointment.resident_id,
             attempted=attempts_made > 0,
-            channel=None if attempts_made == 0 else self._last_attempt_channel(
-                resident,
-                appointment,
-                current_time,
+            channel=last_channel,
+            reason=self._final_reason(
+                rejected_reasons
             ),
-            reason=self._final_reason(rejected_reasons),
             reached=False,
             attempts_made=attempts_made,
         )
@@ -207,45 +289,27 @@ class ReminderOrchestrator:
         appointment: Appointment,
     ) -> str:
         """
-        Build a deterministic reminder body.
+        Build a deterministic reminder message.
 
-        The message is intentionally simple at this stage.
-        Language-specific templating will be separated into its own
-        policy/template layer later.
+        Message templating/language-specific templates can be
+        separated into a dedicated component later.
         """
+
         return (
             f"Reminder: {resident.name} has an appointment on "
             f"{appointment.scheduled_at.isoformat()} for "
-            f"{appointment.service_type} at {appointment.location}."
+            f"{appointment.service_type} at "
+            f"{appointment.location}."
         )
 
-    def _last_attempt_channel(
-        self,
-        resident: Resident,
-        appointment: Appointment,
-        current_time: datetime,
-    ) -> str | None:
-        """Return the last channel used for this appointment."""
-        attempts = [
-            attempt
-            for attempt in self.policy.ledger.all_attempts()
-            if (
-                attempt.resident_id == resident.resident_id
-                and attempt.appointment_id == appointment.appointment_id
-                and attempt.timestamp == current_time
-            )
-        ]
-
-        if not attempts:
-            return None
-
-        return attempts[-1].channel
-
     @staticmethod
-    def _final_reason(rejected_reasons: list[str]) -> str:
+    def _final_reason(
+        rejected_reasons: list[str],
+    ) -> str:
         if not rejected_reasons:
             return "No permitted channel."
 
-        return "Reminder processing completed. " + "; ".join(
-            rejected_reasons
+        return (
+            "Reminder processing completed. "
+            + "; ".join(rejected_reasons)
         )
