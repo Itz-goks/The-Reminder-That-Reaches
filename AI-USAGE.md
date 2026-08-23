@@ -1,63 +1,97 @@
 # AI Usage
 
 ## Purpose
-This file records AI assistance used during development of **The Reminder That Reaches**.
 
-The project author remains responsible for understanding, reviewing, testing, and being able to explain all submitted code and decisions.
+This document records how AI assistance was used during the development of **The Reminder That Reaches**.
 
-## Usage So Far
+AI was used as a development support tool for planning, implementation assistance, debugging, testing, and documentation.
 
-### Planning and requirements analysis
-AI assistance was used to:
-- interpret the Brite Spark guidelines and handbook
-- interpret Problem 07 and the surprise challenge
-- organize the project phases
-- identify required documents, test checkpoints, and submission requirements
+## Areas Where AI Assistance Was Used
 
-### Data inspection
-AI assistance was used to help create:
-- `src/inspect_data.py`
-- `src/inspect_contact_cases.py`
+### 1. Project Planning
 
-These scripts were used to inspect missing contact information, contact combinations, shared contact points, languages, multiple appointments, and appointment-level contactability.
+AI was used to:
 
-The supplied CSV files were not modified.
+- break Problem 07 into development phases
+- identify the main functional requirements
+- plan Git checkpoints
+- identify required project documentation
+- plan the implementation around the surprise requirement
 
-### Models and contact ledger
-AI assistance was used to help scaffold:
-- resident, appointment, and contact-attempt models
-- the rolling 7-day contact ledger
-- unit tests for the 2-in-7 surprise rule
+### 2. Data Inspection
 
-The project author ran and verified the tests.
+AI assistance was used to create and refine scripts for inspecting:
 
-### Central contact policy
-AI assistance was used to help scaffold the central policy and its tests for:
+- appointment completeness
+- missing contact information
+- contact combinations
+- opt-out values
+- languages
+- shared phone numbers
+- shared email addresses
+- multiple appointments
+- appointment-level contactability
+
+The supplied CSV files were inspected without modifying the original data.
+
+### 3. Implementation Assistance
+
+AI assistance was used during implementation of:
+
+- domain models
+- data loading
+- contact ledger
+- contact policy
+- channel service
+- reminder orchestrator
+- persistent contact history
+- shared-contact deduplication
+- metrics
+- CLI/demo utilities
+
+### 4. Testing Assistance
+
+AI assistance was used to help create and expand automated tests covering:
+
+- rolling 7-day boundaries
+- the 2-contact limit
+- failed contact attempts
 - quiet hours
 - opt-outs
-- channel availability
-- rolling 2-in-7 enforcement
+- channel outcomes
+- fallback behaviour
+- persistent contact history
+- shared-contact handling
+- reminder orchestration
+- metrics
 
-The project author ran and verified the tests.
+### 5. Debugging Assistance
 
-### Channel service
-AI assistance was used to help scaffold the adapter around the supplied mock SMS, voice, and email channels and the tests for:
-- contact-point selection
-- channel result interpretation
-- conservative reach classification
-- recording every actual outbound attempt
-- rejecting unsupported channels
+AI assistance was used to help interpret and resolve implementation issues discovered during development, including:
 
-The project author ran the complete test suite and verified **59 tests passed**.
+- test failures
+- data-profile parsing issues
+- missing contact-history persistence
+- test-double/interface mismatches
+- metrics mixing current-run and historical attempts
+- generated runtime files being tracked by Git
 
-## Ongoing Use
-AI assistance may continue to be used for:
-- implementation scaffolding
-- debugging
-- test generation
-- code review
-- documentation
+### 6. Documentation Assistance
 
-Any AI-suggested code will be reviewed, tested, and understood by the project author before inclusion.
+AI assistance was used to help draft and refine:
 
-This file will be updated whenever AI is used for a materially new purpose.
+- `README.md`
+- `DECISIONS.md`
+- `AI-USAGE.md`
+
+## Verification
+
+AI suggestions were checked against the supplied requirements and the actual behaviour of the project.
+
+The project was repeatedly run and tested locally during development.
+
+Final automated test result:
+
+```text
+73 tests
+OK
