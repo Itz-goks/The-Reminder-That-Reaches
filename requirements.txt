@@ -1,0 +1,13 @@
+## Requirements
+
+- Python 3.10 or newer
+- Git for cloning the repository
+- No third-party Python packages are required
+
+## Quick Start
+
+Clone the repository:
+
+```bash
+git clone https://github.com/Itz-goks/The-Reminder-That-Reaches.git
+cd The-Reminder-That-Reaches
