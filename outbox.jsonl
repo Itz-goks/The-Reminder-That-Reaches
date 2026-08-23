@@ -2,3 +2,7 @@
 {"channel": "sms", "to": "555-123-4567", "at": "2026-03-10T10:00:00", "body_preview": "Reminder: appointment tomorrow.", "status": "delivered", "detail": ""}
 {"channel": "sms", "to": "", "at": "2026-03-10T10:00:00", "body_preview": "Test reminder.", "status": "failed", "detail": "no_number"}
 {"channel": "sms", "to": "555-123-4567", "at": "2026-03-10T10:00:00", "body_preview": "Reminder: appointment tomorrow.", "status": "delivered", "detail": ""}
+{"channel": "sms", "to": "", "at": "2026-03-10T10:00:00", "body_preview": "Test reminder.", "status": "failed", "detail": "no_number"}
+{"channel": "sms", "to": "555-123-4567", "at": "2026-03-10T10:00:00", "body_preview": "Reminder: appointment tomorrow.", "status": "delivered", "detail": ""}
+{"channel": "sms", "to": "", "at": "2026-03-10T10:00:00", "body_preview": "Test reminder.", "status": "failed", "detail": "no_number"}
+{"channel": "sms", "to": "555-123-4567", "at": "2026-03-10T10:00:00", "body_preview": "Reminder: appointment tomorrow.", "status": "delivered", "detail": ""}
