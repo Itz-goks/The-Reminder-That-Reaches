@@ -93,6 +93,18 @@ class ContactLedger:
             )
         ]
 
+    def load_history(
+        self,
+        attempts: Iterable[ContactAttempt],
+    ) -> None:
+        """
+        Load historical contact attempts into the ledger.
+
+        Historical attempts count immediately toward the rolling
+            7-day regulatory limit.
+    """
+        self.add_attempts(attempts)
+
     def count_recent_contacts(
         self,
         resident_id: str,

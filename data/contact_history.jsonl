@@ -1,0 +1,12 @@
+{"appointment_id": "AP-70238", "channel": "sms", "contact_point": "555-642-2451", "detail": "", "reached": false, "resident_id": "RS-4396", "status": "delivered", "timestamp": "2026-03-01T10:00:00"}
+{"appointment_id": "AP-70238", "channel": "voice", "contact_point": "555-642-2451", "detail": "", "reached": false, "resident_id": "RS-4396", "status": "no_answer", "timestamp": "2026-03-01T10:00:00"}
+{"appointment_id": "AP-70514", "channel": "sms", "contact_point": "555-607-7032", "detail": "", "reached": false, "resident_id": "RS-4585", "status": "delivered", "timestamp": "2026-03-01T10:00:00"}
+{"appointment_id": "AP-70514", "channel": "voice", "contact_point": "555-607-7032", "detail": "human", "reached": true, "resident_id": "RS-4585", "status": "answered", "timestamp": "2026-03-01T10:00:00"}
+{"appointment_id": "AP-70065", "channel": "sms", "contact_point": "555-216-9775", "detail": "unroutable_landline", "reached": false, "resident_id": "RS-4530", "status": "failed", "timestamp": "2026-03-01T10:00:00"}
+{"appointment_id": "AP-70065", "channel": "voice", "contact_point": "555-216-9775", "detail": "voicemail_left", "reached": false, "resident_id": "RS-4530", "status": "answered", "timestamp": "2026-03-01T10:00:00"}
+{"appointment_id": "AP-70477", "channel": "sms", "contact_point": "555-377-3418", "detail": "unknown_subscriber", "reached": false, "resident_id": "RS-4263", "status": "failed", "timestamp": "2026-03-01T10:00:00"}
+{"appointment_id": "AP-70477", "channel": "voice", "contact_point": "555-377-3418", "detail": "", "reached": false, "resident_id": "RS-4263", "status": "no_answer", "timestamp": "2026-03-01T10:00:00"}
+{"appointment_id": "AP-70033", "channel": "voice", "contact_point": "555-367-5976", "detail": "", "reached": false, "resident_id": "RS-4291", "status": "no_answer", "timestamp": "2026-03-01T10:00:00"}
+{"appointment_id": "AP-70033", "channel": "email", "contact_point": "amara.iverson@example.net", "detail": "", "reached": false, "resident_id": "RS-4291", "status": "delivered", "timestamp": "2026-03-01T10:00:00"}
+{"appointment_id": "AP-70054", "channel": "sms", "contact_point": "555-309-2697", "detail": "carrier_rejected", "reached": false, "resident_id": "RS-4121", "status": "failed", "timestamp": "2026-03-01T10:00:00"}
+{"appointment_id": "AP-70054", "channel": "voice", "contact_point": "555-309-2697", "detail": "", "reached": false, "resident_id": "RS-4121", "status": "no_answer", "timestamp": "2026-03-01T10:00:00"}

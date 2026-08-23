@@ -5,6 +5,7 @@ from datetime import datetime
 
 from channels.channels import send_email, send_sms, send_voice
 
+from .contact_history import ContactHistoryStore
 from .contact_ledger import ContactLedger
 from .models import ContactAttempt, Resident
 
@@ -33,20 +34,26 @@ class ChannelService:
     - call the supplied channel implementation
     - interpret status + detail
     - record every outbound attempt in the ContactLedger
+    - optionally persist every attempt for retrospective audit/history
 
     This class does NOT decide whether a contact is allowed.
-    ContactPolicy remains responsible for permission/safety checks.
+    ContactPolicy remains responsible for permission and safety rules.
     """
 
     SUPPORTED_CHANNELS = {"sms", "voice", "email"}
 
-    def __init__(self, ledger: ContactLedger) -> None:
+    def __init__(
+        self,
+        ledger: ContactLedger,
+        history_store: ContactHistoryStore | None = None,
+    ) -> None:
         self.ledger = ledger
+        self.history_store = history_store
 
     def get_contact_point(
-    self,
-    resident: Resident,
-    channel: str,
+        self,
+        resident: Resident,
+        channel: str,
     ) -> str:
         """Return the contact value to use for a supported channel."""
 
@@ -61,7 +68,8 @@ class ChannelService:
         if channel == "email":
             return (resident.email or "").strip()
 
-        # voice
+        # Voice:
+        # Prefer mobile when available; otherwise use landline.
         if resident.mobile:
             return resident.mobile.strip()
 
@@ -77,9 +85,9 @@ class ChannelService:
         Decide whether the channel result provides evidence
         that a human resident was reached.
 
-        Conservative rule:
-        - Voice answered/human => reached
-        - Everything else => not confirmed as human reach
+        Current conservative rule:
+        - voice + answered + human => reached
+        - all other outcomes => not confirmed as human reach
 
         SMS/email delivery is recorded as delivery evidence,
         but not as confirmed human reach.
@@ -90,7 +98,10 @@ class ChannelService:
         detail = detail.lower().strip()
 
         if channel == "voice":
-            return status == "answered" and detail == "human"
+            return (
+                status == "answered"
+                and detail == "human"
+            )
 
         return False
 
@@ -112,7 +123,9 @@ class ChannelService:
         channel = channel.lower().strip()
 
         if channel not in self.SUPPORTED_CHANNELS:
-            raise ValueError(f"Unsupported channel: {channel}")
+            raise ValueError(
+                f"Unsupported channel: {channel}"
+            )
 
         contact_point = self.get_contact_point(
             resident=resident,
@@ -143,8 +156,13 @@ class ChannelService:
                 attempt=attempt_number,
             )
 
-        status = str(result.get("status", "unknown"))
-        detail = str(result.get("detail", ""))
+        status = str(
+            result.get("status", "unknown")
+        )
+
+        detail = str(
+            result.get("detail", "")
+        )
 
         reached = self.interpret_reach(
             channel=channel,
@@ -163,9 +181,13 @@ class ChannelService:
             reached=reached,
         )
 
-        # IMPORTANT:
-        # Every outbound attempt counts, including failures.
+        # Every actual outbound attempt counts.
         self.ledger.add_attempt(attempt)
+
+        # Persist the same attempt so future runs can enforce
+        # the retrospective rolling 2-in-7 rule.
+        if self.history_store is not None:
+            self.history_store.append(attempt)
 
         return ChannelResult(
             resident_id=resident.resident_id,

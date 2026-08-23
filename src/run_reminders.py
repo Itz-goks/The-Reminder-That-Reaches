@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from src.channel_service import ChannelService
+from src.contact_history import ContactHistoryStore
 from src.contact_ledger import ContactLedger
 from src.contact_policy import ContactPolicy
 from src.data_loader import load_appointments, load_residents
@@ -16,6 +17,7 @@ DATA_DIR = ROOT / "data"
 
 APPOINTMENTS_FILE = DATA_DIR / "appointments.csv"
 CONTACTS_FILE = DATA_DIR / "contacts.csv"
+HISTORY_FILE = DATA_DIR / "contact_history.jsonl"
 
 
 def print_result(result) -> None:
@@ -36,25 +38,34 @@ def main() -> None:
     print("REAL DATA END-TO-END RUN")
     print("=" * 70)
 
-    # Load the supplied data.
     appointments = load_appointments(APPOINTMENTS_FILE)
     residents = load_residents(CONTACTS_FILE)
 
     print(f"\nAppointments loaded: {len(appointments)}")
     print(f"Residents loaded:    {len(residents)}")
 
-    # Use a deterministic current time for the demo.
-    # This allows the run to be reproduced consistently.
     current_time = datetime(2026, 3, 1, 10, 0)
 
-    ledger = ContactLedger()
+    # Load persistent historical contact attempts first.
+    history_store = ContactHistoryStore(HISTORY_FILE)
+    historical_attempts = history_store.load()
+
+    print(
+        f"Historical contact attempts loaded: "
+        f"{len(historical_attempts)}"
+    )
+
+    ledger = ContactLedger(
+        attempts=historical_attempts
+    )
 
     policy = ContactPolicy(
-        ledger=ledger,
+        ledger=ledger
     )
 
     channel_service = ChannelService(
         ledger=ledger,
+        history_store=history_store,
     )
 
     orchestrator = ReminderOrchestrator(
@@ -70,10 +81,16 @@ def main() -> None:
         current_time=current_time,
     )
 
-    print(f"\nEligible appointments processed: {len(results)}")
+    print(
+        f"\nEligible appointments processed: "
+        f"{len(results)}"
+    )
 
     if not results:
-        print("No appointments were inside the configured reminder window.")
+        print(
+            "No appointments were inside the configured "
+            "reminder window."
+        )
         return
 
     print("\n--- RESULTS ---")
@@ -110,7 +127,15 @@ def main() -> None:
         print(f"  {channel}: {count}")
 
     print("\nContact ledger:")
-    print(f"  Total recorded outbound attempts: {len(ledger.all_attempts())}")
+    print(
+        "  Total recorded outbound attempts: "
+        f"{len(ledger.all_attempts())}"
+    )
+
+    print(
+        f"  Persistent history file: "
+        f"{HISTORY_FILE}"
+    )
 
     print("\nRun completed.")
     print("=" * 70)
