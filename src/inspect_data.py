@@ -27,6 +27,17 @@ def is_missing(value: str | None) -> bool:
     return value is None or value.strip() == ""
 
 
+def is_opted_out(row: dict[str, str], field: str) -> bool:
+    """
+    Interpret the supplied opt-out format.
+
+    The supplied Problem 07 data uses:
+        Y = opted out
+        N = not opted out
+    """
+    return row.get(field, "").strip().upper() == "Y"
+
+
 def profile_appointments(rows: list[dict[str, str]]) -> None:
     print("\n=== APPOINTMENTS ===")
 
@@ -43,11 +54,23 @@ def profile_appointments(rows: list[dict[str, str]]) -> None:
 
     print("\nMissing values:")
     for field in required_fields:
-        missing = sum(is_missing(row.get(field)) for row in rows)
+        missing = sum(
+            is_missing(row.get(field))
+            for row in rows
+        )
         print(f"  {field}: {missing}")
 
-    appointment_ids = [row["appointment_id"] for row in rows if row.get("appointment_id")]
-    resident_ids = [row["resident_id"] for row in rows if row.get("resident_id")]
+    appointment_ids = [
+        row["appointment_id"]
+        for row in rows
+        if row.get("appointment_id")
+    ]
+
+    resident_ids = [
+        row["resident_id"]
+        for row in rows
+        if row.get("resident_id")
+    ]
 
     duplicate_appointments = {
         value: count
@@ -55,15 +78,36 @@ def profile_appointments(rows: list[dict[str, str]]) -> None:
         if count > 1
     }
 
-    print(f"\nUnique residents with appointments: {len(set(resident_ids))}")
-    print(f"Duplicate appointment IDs: {len(duplicate_appointments)}")
+    print(
+        f"\nUnique residents with appointments: "
+        f"{len(set(resident_ids))}"
+    )
+
+    print(
+        f"Duplicate appointment IDs: "
+        f"{len(duplicate_appointments)}"
+    )
 
     if duplicate_appointments:
-        print("  Examples:", list(duplicate_appointments.items())[:10])
+        print(
+            "  Examples:",
+            list(duplicate_appointments.items())[:10],
+        )
 
-    service_counts = Counter(row["service_type"] for row in rows)
-    location_counts = Counter(row["location"] for row in rows)
-    status_counts = Counter(row["status"] for row in rows)
+    service_counts = Counter(
+        row["service_type"]
+        for row in rows
+    )
+
+    location_counts = Counter(
+        row["location"]
+        for row in rows
+    )
+
+    status_counts = Counter(
+        row["status"]
+        for row in rows
+    )
 
     print("\nService types:")
     for key, value in sorted(service_counts.items()):
@@ -78,16 +122,22 @@ def profile_appointments(rows: list[dict[str, str]]) -> None:
         print(f"  {key}: {value}")
 
     dates = []
+
     for row in rows:
         value = row.get("scheduled_at", "").strip()
-        if value:
-            try:
-                dates.append(datetime.fromisoformat(value))
-            except ValueError:
-                pass
+
+        if not value:
+            continue
+
+        try:
+            dates.append(
+                datetime.fromisoformat(value)
+            )
+        except ValueError:
+            pass
 
     if dates:
-        print(f"\nAppointment date range:")
+        print("\nAppointment date range:")
         print(f"  Earliest: {min(dates)}")
         print(f"  Latest:   {max(dates)}")
 
@@ -97,40 +147,101 @@ def profile_contacts(rows: list[dict[str, str]]) -> None:
 
     print(f"Total residents: {len(rows)}")
 
-    contact_fields = ["mobile", "landline", "email"]
-
-    print("\nAvailable contact information:")
-    for field in contact_fields:
-        available = sum(not is_missing(row.get(field)) for row in rows)
-        missing = len(rows) - available
-        print(f"  {field}: {available} available, {missing} missing")
-
-    no_contact = [
-        row for row in rows
-        if all(is_missing(row.get(field)) for field in contact_fields)
+    contact_fields = [
+        "mobile",
+        "landline",
+        "email",
     ]
 
-    print(f"\nResidents with no contact information: {len(no_contact)}")
+    print("\nAvailable contact information:")
 
-    opt_out_fields = ["sms_optout", "voice_optout", "email_optout"]
-
-    print("\nOpt-out counts:")
-    for field in opt_out_fields:
-        count = sum(
-            row.get(field, "").strip().lower() == "yes"
+    for field in contact_fields:
+        available = sum(
+            not is_missing(row.get(field))
             for row in rows
         )
+
+        missing = len(rows) - available
+
+        print(
+            f"  {field}: "
+            f"{available} available, "
+            f"{missing} missing"
+        )
+
+    no_contact = [
+        row
+        for row in rows
+        if all(
+            is_missing(row.get(field))
+            for field in contact_fields
+        )
+    ]
+
+    print(
+        f"\nResidents with no contact information: "
+        f"{len(no_contact)}"
+    )
+
+    # ---------------------------------------------------------
+    # OPT-OUTS
+    # ---------------------------------------------------------
+
+    opt_out_fields = [
+        "sms_optout",
+        "voice_optout",
+        "email_optout",
+    ]
+
+    print("\nOpt-out counts:")
+
+    for field in opt_out_fields:
+        count = sum(
+            is_opted_out(row, field)
+            for row in rows
+        )
+
         print(f"  {field}: {count}")
 
     all_three_opted_out = [
-        row for row in rows
+        row
+        for row in rows
         if all(
-            row.get(field, "").strip().lower() == "yes"
+            is_opted_out(row, field)
             for field in opt_out_fields
         )
     ]
 
-    print(f"\nResidents opted out of all three channels: {len(all_three_opted_out)}")
+    print(
+        "\nResidents opted out of all three channels: "
+        f"{len(all_three_opted_out)}"
+    )
+
+    # Show all combinations so we understand the actual dataset.
+    opt_out_combinations = Counter(
+        (
+            "Y" if is_opted_out(row, "sms_optout") else "N",
+            "Y" if is_opted_out(row, "voice_optout") else "N",
+            "Y" if is_opted_out(row, "email_optout") else "N",
+        )
+        for row in rows
+    )
+
+    print(
+        "\nOpt-out combinations "
+        "(SMS, Voice, Email):"
+    )
+
+    for combination, count in sorted(
+        opt_out_combinations.items()
+    ):
+        print(
+            f"  {combination}: {count}"
+        )
+
+    # ---------------------------------------------------------
+    # LANGUAGES
+    # ---------------------------------------------------------
 
     language_counts = Counter(
         row.get("language", "").strip()
@@ -139,72 +250,140 @@ def profile_contacts(rows: list[dict[str, str]]) -> None:
     )
 
     print("\nLanguages:")
-    for language, count in sorted(language_counts.items()):
-        print(f"  {language}: {count}")
 
-    # Shared mobile numbers
-    mobile_to_residents: defaultdict[str, list[str]] = defaultdict(list)
+    for language, count in sorted(
+        language_counts.items()
+    ):
+        print(
+            f"  {language}: {count}"
+        )
+
+    # ---------------------------------------------------------
+    # SHARED MOBILE NUMBERS
+    # ---------------------------------------------------------
+
+    mobile_to_residents: defaultdict[
+        str,
+        list[str]
+    ] = defaultdict(list)
 
     for row in rows:
         mobile = row.get("mobile", "").strip()
         resident_id = row.get("resident_id", "").strip()
 
         if mobile:
-            mobile_to_residents[mobile].append(resident_id)
+            mobile_to_residents[mobile].append(
+                resident_id
+            )
 
     shared_mobile = {
         mobile: residents
-        for mobile, residents in mobile_to_residents.items()
+        for mobile, residents
+        in mobile_to_residents.items()
         if len(residents) > 1
     }
 
-    print(f"\nShared mobile numbers: {len(shared_mobile)}")
+    print(
+        f"\nShared mobile numbers: "
+        f"{len(shared_mobile)}"
+    )
 
     if shared_mobile:
         print("  Examples:")
-        for mobile, residents in list(shared_mobile.items())[:10]:
-            print(f"    {mobile}: {residents}")
 
-    # Shared email addresses
-    email_to_residents: defaultdict[str, list[str]] = defaultdict(list)
+        for mobile, residents in list(
+            shared_mobile.items()
+        )[:10]:
+            print(
+                f"    {mobile}: "
+                f"{residents}"
+            )
+
+    # ---------------------------------------------------------
+    # SHARED EMAIL ADDRESSES
+    # ---------------------------------------------------------
+
+    email_to_residents: defaultdict[
+        str,
+        list[str]
+    ] = defaultdict(list)
 
     for row in rows:
-        email = row.get("email", "").strip().lower()
-        resident_id = row.get("resident_id", "").strip()
+        email = row.get(
+            "email",
+            "",
+        ).strip().lower()
+
+        resident_id = row.get(
+            "resident_id",
+            "",
+        ).strip()
 
         if email:
-            email_to_residents[email].append(resident_id)
+            email_to_residents[email].append(
+                resident_id
+            )
 
     shared_email = {
         email: residents
-        for email, residents in email_to_residents.items()
+        for email, residents
+        in email_to_residents.items()
         if len(residents) > 1
     }
 
-    print(f"\nShared email addresses: {len(shared_email)}")
+    print(
+        f"\nShared email addresses: "
+        f"{len(shared_email)}"
+    )
 
     if shared_email:
         print("  Examples:")
-        for email, residents in list(shared_email.items())[:10]:
-            print(f"    {email}: {residents}")
 
-    # Verification date
+        for email, residents in list(
+            shared_email.items()
+        )[:10]:
+            print(
+                f"    {email}: "
+                f"{residents}"
+            )
+
+    # ---------------------------------------------------------
+    # VERIFICATION DATES
+    # ---------------------------------------------------------
+
     verification_dates = []
 
     for row in rows:
-        value = row.get("number_last_verified", "").strip()
+        value = row.get(
+            "number_last_verified",
+            "",
+        ).strip()
 
-        if value:
-            try:
-                verification_dates.append(datetime.fromisoformat(value))
-            except ValueError:
-                pass
+        if not value:
+            continue
 
-    print(f"\nValid verification dates: {len(verification_dates)}")
+        try:
+            verification_dates.append(
+                datetime.fromisoformat(value)
+            )
+        except ValueError:
+            pass
+
+    print(
+        f"\nValid verification dates: "
+        f"{len(verification_dates)}"
+    )
 
     if verification_dates:
-        print(f"  Earliest verification: {min(verification_dates)}")
-        print(f"  Latest verification:   {max(verification_dates)}")
+        print(
+            f"  Earliest verification: "
+            f"{min(verification_dates)}"
+        )
+
+        print(
+            f"  Latest verification: "
+            f"{max(verification_dates)}"
+        )
 
 
 def cross_profile(
@@ -225,7 +404,10 @@ def cross_profile(
         if row.get("resident_id")
     }
 
-    missing_contacts = appointment_resident_ids - contact_resident_ids
+    missing_contacts = (
+        appointment_resident_ids
+        - contact_resident_ids
+    )
 
     print(
         "Appointment residents without a contact record: "
@@ -240,30 +422,54 @@ def cross_profile(
 
     multiple_appointments = {
         resident: count
-        for resident, count in appointments_per_resident.items()
+        for resident, count
+        in appointments_per_resident.items()
         if count > 1
     }
 
-    print(f"Residents with multiple appointments: {len(multiple_appointments)}")
+    print(
+        "Residents with multiple appointments: "
+        f"{len(multiple_appointments)}"
+    )
 
     if multiple_appointments:
         print("  Examples:")
-        for resident, count in list(multiple_appointments.items())[:10]:
-            print(f"    {resident}: {count} appointments")
+
+        for resident, count in list(
+            multiple_appointments.items()
+        )[:10]:
+            print(
+                f"    {resident}: "
+                f"{count} appointments"
+            )
 
 
 def main() -> None:
-    appointments = load_csv(APPOINTMENTS_FILE)
-    contacts = load_csv(CONTACTS_FILE)
+    appointments = load_csv(
+        APPOINTMENTS_FILE
+    )
+
+    contacts = load_csv(
+        CONTACTS_FILE
+    )
 
     print("========================================")
     print("  THE REMINDER THAT REACHES")
     print("  DATA PROFILE")
     print("========================================")
 
-    profile_appointments(appointments)
-    profile_contacts(contacts)
-    cross_profile(appointments, contacts)
+    profile_appointments(
+        appointments
+    )
+
+    profile_contacts(
+        contacts
+    )
+
+    cross_profile(
+        appointments,
+        contacts,
+    )
 
     print("\n=== DONE ===")
     print("No source data was modified.")
