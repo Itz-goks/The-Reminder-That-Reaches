@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -17,8 +18,13 @@ DATA_DIR = ROOT / "data"
 
 APPOINTMENTS_FILE = DATA_DIR / "appointments.csv"
 CONTACTS_FILE = DATA_DIR / "contacts.csv"
-HISTORY_FILE = DATA_DIR / "contact_history.jsonl"
 
+HISTORY_FILE = Path(
+    os.environ.get(
+        "CONTACT_HISTORY_PATH",
+        str(DATA_DIR / "contact_history.jsonl"),
+    )
+)
 
 def print_result(result) -> None:
     """Print one auditable reminder result."""
