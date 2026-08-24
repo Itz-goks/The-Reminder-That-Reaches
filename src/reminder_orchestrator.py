@@ -35,6 +35,7 @@ class ReminderOrchestrator:
     - interpret the result through ChannelService
     - perform controlled fallback when the resident is not reached
     - re-check policy before every fallback attempt
+    - generate a reminder using the resident's recorded language
     """
 
     DEFAULT_REMINDER_WINDOW = timedelta(days=1)
@@ -187,7 +188,6 @@ class ReminderOrchestrator:
 
             # -------------------------------------------------
             # 3. Protect against duplicate contact points
-            #    during this processing run
             # -------------------------------------------------
             dedup_decision = self.deduplicator.check(
                 channel=channel,
@@ -218,16 +218,15 @@ class ReminderOrchestrator:
                 attempt_number=attempts_made,
             )
 
-            # Record contact point in the current-run
-            # deduplication state only after the actual
-            # outbound call has happened.
+            # Record the contact point only after an actual
+            # outbound attempt has happened.
             self.deduplicator.record(
                 channel=channel,
                 contact_point=contact_point,
             )
 
             # -------------------------------------------------
-            # 5. Human reached → STOP
+            # 5. Confirmed human reach -> STOP
             # -------------------------------------------------
             if channel_result.reached:
                 return ReminderResult(
@@ -249,7 +248,7 @@ class ReminderOrchestrator:
                 )
 
             # -------------------------------------------------
-            # 6. Not reached → controlled fallback
+            # 6. Not reached -> controlled fallback
             # -------------------------------------------------
             rejected_reasons.append(
                 (
@@ -264,9 +263,8 @@ class ReminderOrchestrator:
                 )
             )
 
-            # The next iteration automatically calls
-            # ContactPolicy again. This re-checks the
-            # rolling 2-in-7 limit before another contact.
+            # On the next iteration ContactPolicy is checked
+            # again, including the rolling 2-in-7 limit.
 
         # -----------------------------------------------------
         # No channel resulted in confirmed human reach
@@ -289,17 +287,55 @@ class ReminderOrchestrator:
         appointment: Appointment,
     ) -> str:
         """
-        Build a deterministic reminder message.
+        Build a reminder message using the resident's language.
 
-        Message templating/language-specific templates can be
-        separated into a dedicated component later.
+        Supported language codes in the supplied data:
+        en, es, ru, so, vi, zh
+
+        Missing or unknown language codes fall back to English.
         """
 
-        return (
-            f"Reminder: {resident.name} has an appointment on "
-            f"{appointment.scheduled_at.isoformat()} for "
-            f"{appointment.service_type} at "
-            f"{appointment.location}."
+        language = (
+            resident.language or "en"
+        ).strip().lower()
+
+        templates = {
+            "en": (
+                "Reminder: {name} has an appointment on "
+                "{date} for {service} at {location}."
+            ),
+            "es": (
+                "Recordatorio: {name} tiene una cita el "
+                "{date} para {service} en {location}."
+            ),
+            "ru": (
+                "Напоминание: у {name} назначена встреча "
+                "{date} по услуге «{service}» в {location}."
+            ),
+            "so": (
+                "Xusuusin: {name} wuxuu leeyahay ballan "
+                "{date} oo ah {service} goobta {location}."
+            ),
+            "vi": (
+                "Nhắc nhở: {name} có lịch hẹn vào "
+                "{date} cho dịch vụ {service} tại {location}."
+            ),
+            "zh": (
+                "提醒：{name} 于 {date} 在 {location} "
+                "有一个 {service} 预约。"
+            ),
+        }
+
+        template = templates.get(
+            language,
+            templates["en"],
+        )
+
+        return template.format(
+            name=resident.name,
+            date=appointment.scheduled_at.isoformat(),
+            service=appointment.service_type,
+            location=appointment.location,
         )
 
     @staticmethod

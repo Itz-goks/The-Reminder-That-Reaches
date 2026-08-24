@@ -549,6 +549,47 @@ class TestReminderOrchestrator(unittest.TestCase):
             2,
         )
 
+    def test_message_uses_resident_language(self) -> None:
+        resident = Resident(
+            resident_id="RS-ES",
+            name="Test Resident",
+            mobile="555-123-4567",
+            landline="555-765-4321",
+            email="test@example.com",
+            language="es",
+     )
+
+        message = ReminderOrchestrator._build_message(
+            resident=resident,
+            appointment=self.appointment,
+        )
+
+        self.assertIn(
+            "Recordatorio",
+            message,
+        )
+
+
+    def test_message_falls_back_to_english_for_unknown_language(self) -> None:
+        resident = Resident(
+            resident_id="RS-XX",
+            name="Test Resident",
+            mobile="555-123-4567",
+            landline="555-765-4321",
+            email="test@example.com",
+            language="xx",
+        )
+
+        message = ReminderOrchestrator._build_message(
+            resident=resident,
+            appointment=self.appointment,
+        )
+
+        self.assertIn(
+            "Reminder",
+            message,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
