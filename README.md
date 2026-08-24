@@ -2,24 +2,18 @@
 
 **Brite Spark 2026 — Problem 07**
 
----
-
-# 1. START HERE — Run the Program
+## 1. START HERE — Run the Program
 
 This is a command-line Python project. There is no website or GUI to open.
 
-## Step 1 — Clone the project
-
-Open a terminal and run:
+### Step 1 — Clone the project
 
 ```bash
 git clone https://github.com/Itz-goks/The-Reminder-That-Reaches.git
 cd The-Reminder-That-Reaches
 ```
 
-## Step 2 — Check Python
-
-Run:
+### Step 2 — Check Python
 
 ```bash
 python --version
@@ -27,76 +21,48 @@ python --version
 
 Python 3.10+ is recommended.
 
-## Step 3 — Dependencies
+### Step 3 — Dependencies
 
 No third-party Python packages are required.
 
 The project uses Python's standard library only.
 
-`requirements.txt` is intentionally empty.
+`requirements.txt` is intentionally empty except for comments documenting this.
 
-## Step 4 — Run the tests
-
-Run:
+### Step 4 — Run the tests
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-A successful setup should end with:
+Current verified result:
 
 ```text
-Ran 73 tests
+Ran 75 tests
 OK
 ```
 
-## Step 5 — Run the actual reminder program
-
-Run:
+### Step 5 — Run the program
 
 ```bash
 python -m src.run_reminders
 ```
 
-The program will:
+The program loads the supplied data, finds eligible appointments, checks contact rules, uses the available channels, performs controlled fallback, records the outcome, and prints metrics and audit information.
 
-1. Load the supplied appointments.
-2. Load the supplied resident/contact data.
-3. Load previous contact history.
-4. Find appointments inside the reminder window.
-5. Check contact rules.
-6. Try SMS, voice, or email as permitted.
-7. Fall back when the resident is not confirmed as reached.
-8. Stop when human reach is confirmed or no further contact is allowed.
-9. Record outbound attempts.
-10. Print the results, metrics, and audit information.
-
-You should see sections like:
-
-```text
-THE REMINDER THAT REACHES
-REAL DATA END-TO-END RUN
-
---- RESULTS ---
-
---- SUMMARY ---
-
---- AUDIT ---
-```
-
-That terminal output is the running application.
+The terminal output is the running application.
 
 ---
 
-# 2. ONE-MINUTE EXPLANATION
+## 2. ONE-MINUTE EXPLANATION
 
-> **The Reminder That Reaches** is a policy-driven reminder system. Before contacting a resident, it checks opt-outs, quiet hours, available contact methods, shared-contact duplication, and the rolling two-contacts-in-seven-days limit. It then tries an allowed channel, falls back when necessary, records every actual attempt, and stops when human reach is confirmed or no further contact is allowed. The contact history is persistent, so the regulatory limit continues to work across separate runs.
+> **The Reminder That Reaches** is a policy-driven reminder system for existing service appointments. Before contacting a resident, it checks opt-outs, quiet hours, available contact methods, shared-contact duplication, the resident's recorded language, and the rolling two-contacts-in-seven-days limit. It then tries an allowed channel, falls back when necessary, records every actual outbound attempt, and stops when human reach is confirmed or no further contact is allowed. Contact history is persistent, so the regulatory limit continues to work across separate runs.
 
-# 4. AFTER THE PROGRAM RUNS — Understand the Output
+---
 
-Once the command works, the following sections explain what the output means and how the project works.
+## 3. AFTER THE PROGRAM RUNS — Understand the Output
 
-## Results
+### Results
 
 Each result represents one eligible appointment.
 
@@ -110,15 +76,14 @@ This means:
 
 - `AP-70514` = appointment ID
 - `RS-4585` = resident ID
-- `attempted=True` = at least one outbound contact was made
+- `attempted=True` = an outbound contact was made
 - `channel=voice` = the final channel used was voice
-- `reached=True` = the system confirmed human reach
+- `reached=True` = confirmed human reach
 - `attempts=2` = two outbound attempts were made
-- the remaining text explains what happened
 
-## Summary
+### Summary
 
-The summary separates current-run activity from historical contact history.
+The summary separates current-run activity from historical contact history:
 
 ```text
 Processed
@@ -128,69 +93,15 @@ Not reached
 Blocked
 ```
 
-### Processed
+### Audit
 
-Number of appointments that were inside the current reminder window.
-
-### Outbound attempted
-
-Number of appointments for which the system actually made at least one outbound contact.
-
-### Reached
-
-Number of appointments where confirmed human reach occurred.
-
-### Not reached
-
-A contact attempt happened, but confirmed human reach was not established.
-
-### Blocked
-
-No outbound attempt was allowed for the appointment.
+The audit section shows the persistent history file and how many attempts are currently in the ledger.
 
 ---
 
-# 4. The Reminder Decision Flow
+## 4. Channel Behaviour
 
-The system follows:
-
-```text
-Appointment
-    |
-    v
-Resident / Contact Data
-    |
-    v
-Contact Policy
-    |
-    +--> Quiet hours
-    +--> Opt-outs
-    +--> Contact availability
-    +--> Rolling 2-in-7 limit
-    |
-    v
-Shared Contact Check
-    |
-    v
-SMS / Voice / Email
-    |
-    v
-Outcome Interpretation
-    |
-    v
-Contact History + Audit
-    |
-    v
-Metrics
-```
-
-The project is designed so that the system checks whether contact is appropriate before actually sending anything.
-
----
-
-# 5. Channel Behaviour
-
-Default order:
+Default channel order:
 
 ```text
 SMS -> Voice -> Email
@@ -203,21 +114,21 @@ The sequence stops when:
 - human reach is confirmed
 - the rolling 2-in-7 limit blocks another contact
 - no permitted channel remains
-- contact information is unavailable
-- all permitted channels have been exhausted
+- usable contact information is unavailable
+- all permitted channels are exhausted
 
 ---
 
-# 6. What Counts as "Reached"
+## 5. What Counts as "Reached"
 
-The project deliberately uses a conservative definition.
+The system uses a conservative definition.
 
 ```text
 Voice + answered + human
     -> confirmed human reach
 ```
 
-The following are not treated as confirmed human reach:
+These are not treated as confirmed human reach:
 
 ```text
 Voice voicemail
@@ -227,11 +138,34 @@ SMS delivered
 Email delivered
 ```
 
-SMS and email delivery are recorded as delivery evidence, but the system does not claim that the resident actually saw or answered the reminder.
+SMS/email delivery is recorded as delivery evidence, not proof that the resident saw the reminder.
 
 ---
 
-# 7. Surprise Requirement — 2 Contacts in 7 Days
+## 6. Language Selection
+
+Reminder messages use the resident's recorded `language` value.
+
+The supplied dataset contains:
+
+```text
+en  English
+es  Spanish
+ru  Russian
+so  Somali
+vi  Vietnamese
+zh  Chinese
+```
+
+Supported language templates are selected deterministically.
+
+Missing or unknown language codes fall back to English.
+
+The system does not claim universal language coverage; it supports the languages present in the supplied dataset.
+
+---
+
+## 7. Surprise Requirement — 2 Contacts in 7 Days
 
 The system enforces:
 
@@ -247,69 +181,46 @@ Rules:
 - a third outbound contact is blocked
 - the decision is auditable
 
-Persistent contact history is stored locally in:
+Persistent history is stored locally in:
 
 ```text
 data/contact_history.jsonl
 ```
 
-This is what allows a later program run to remember previous contacts.
+This is runtime-generated and is intentionally not tracked in Git.
 
 ---
 
-# 8. Optional Two-Run Demonstration
+## 8. Optional Two-Run Demonstration
 
-Use a separate history file so the demonstration starts clean.
+Use a separate history file for a clean demo.
 
-## First run
+### First run
 
 ```bash
 rm -f data/demo_history.jsonl
 CONTACT_HISTORY_PATH=data/demo_history.jsonl python -m src.run_reminders
 ```
 
-The first run should show:
+This should start with:
 
 ```text
 Historical contact attempts loaded: 0
 ```
 
-It demonstrates:
+It demonstrates reminder attempts, fallback, reach classification, and persistence.
 
-```text
-Appointment
-  -> policy checks
-  -> SMS / Voice / Email
-  -> fallback when needed
-  -> reached / not reached
-  -> history saved
-```
-
-## Second run
-
-Run the same command again:
+### Second run
 
 ```bash
 CONTACT_HISTORY_PATH=data/demo_history.jsonl python -m src.run_reminders
 ```
 
-Now the previous attempts are loaded.
-
-The system should demonstrate:
-
-```text
-History loaded
-    ->
-2-in-7 check
-    ->
-new contact blocked when the resident has already reached the limit
-```
-
-This is the easiest way to demonstrate the surprise requirement.
+The previous attempts are now loaded and the rolling 2-in-7 rule can block new outbound contacts.
 
 ---
 
-# 9. Regulatory Audit
+## 9. Regulatory Audit
 
 Run:
 
@@ -317,28 +228,24 @@ Run:
 python -m src.contact_audit
 ```
 
-When prompted, enter a resident ID from the run.
-
-For example:
+Enter a resident ID from the run and a reference date/time, for example:
 
 ```text
 Resident ID: RS-4291
-Date/time (YYYY-MM-DD HH:MM): 2026-03-01 10:00
+Date/time (YYYY-MM-DD HH:MM): 2026-03-02 10:00
 ```
 
-The audit reports:
+The audit shows:
 
-- the resident
-- the reference time
 - contacts in the preceding rolling seven-day window
-- the contact count
-- the remaining allowance
+- contact count
+- remaining allowance
 - whether another contact is allowed
-- the reason for the decision
+- reason for the decision
 
 ---
 
-# 10. Data Profile
+## 10. Data Profile
 
 The supplied data was inspected before implementation.
 
@@ -361,17 +268,7 @@ The original CSV files are not modified.
 
 ---
 
-# 11. Shared Contact Handling
-
-The supplied data contains residents who share phone numbers or email addresses.
-
-A run-scoped deduplication layer prevents unnecessary reuse of the same channel/contact point during one processing run.
-
-This is separate from the resident-level 2-in-7 rule.
-
----
-
-# 12. Project Structure
+## 11. Project Structure
 
 ```text
 The-Reminder-That-Reaches/
@@ -408,65 +305,57 @@ The-Reminder-That-Reaches/
 
 ---
 
-# 13. Inspect the Data
-
-To inspect the supplied data:
+## 12. Data Inspection
 
 ```bash
 python src/inspect_data.py
-```
-
-To inspect contact edge cases:
-
-```bash
 python src/inspect_contact_cases.py
 ```
 
-These scripts only inspect the supplied CSV files and do not modify them.
+These scripts only inspect the supplied CSV data.
 
 ---
 
-# 14. Test Suite
+## 13. Testing
 
 The automated test suite covers:
 
 - data loading
 - contact ledger
-- rolling seven-day boundaries
+- rolling 7-day boundaries
 - quiet hours
 - opt-outs
 - channel behaviour
 - reach interpretation
 - fallback
-- persistent contact history
+- persistent history
 - shared-contact deduplication
+- language selection and fallback
 - reminder orchestration
 - metrics
 
 Current verified result:
 
 ```text
-Ran 73 tests
+Ran 75 tests
 OK
 ```
 
 ---
 
-# 15. Requirements
+## 14. Requirements
 
 The project uses Python standard-library modules only.
 
 No third-party packages are required.
 
-Therefore the blank `requirements.txt` is intentional.
-
-No database, web server, API key, or external messaging account is required.
+Therefore `requirements.txt` contains no installable dependencies.
 
 ---
 
-# 16. Runtime Files
+## 15. Runtime Files
 
-The program can create runtime/audit files such as:
+The application can create:
 
 ```text
 outbox.jsonl
@@ -474,11 +363,11 @@ data/contact_history.jsonl
 data/demo_history.jsonl
 ```
 
-These are runtime files and are not third-party dependencies.
+These are runtime/audit files, not source dependencies.
 
 ---
 
-# 17. Clean-Clone Verification
+## 16. Clean-Clone Verification
 
 An evaluator can run:
 
@@ -492,33 +381,25 @@ python -m src.run_reminders
 Expected test result:
 
 ```text
-Ran 73 tests
+Ran 75 tests
 OK
 ```
 
-No special IDE or service is required.
+No IDE, database, web server, API key, or external messaging account is required.
 
 ---
 
-# 18. Documentation Files
+## 17. Documentation
 
-### README.md
-
-Explains how to clone, test, run, audit, and understand the project.
-
-### DECISIONS.md
-
-Records the important data findings, design choices, rejected approaches, and scope decisions.
-
-### AI-USAGE.md
-
-Records where AI assistance was used during development.
+- `README.md` — setup, run instructions, output explanation, architecture, scope
+- `DECISIONS.md` — data findings, design decisions, edge cases, surprise retrofit
+- `AI-USAGE.md` — record of AI assistance used during development
 
 ---
 
-# 19. Scope
+## 18. Scope
 
-The core project does not include:
+The core solution does not include:
 
 - appointment booking
 - appointment rescheduling
@@ -531,10 +412,3 @@ The core project does not include:
 - generative message creation
 
 The scope was intentionally kept focused on Problem 07 and the surprise requirement.
-
----
-
-# 20. One-Minute Explanation
-
-> **The Reminder That Reaches** is a policy-driven reminder system. Before contacting a resident, it checks opt-outs, quiet hours, available contact methods, shared-contact duplication, and the rolling two-contacts-in-seven-days limit. It then tries an allowed channel, falls back when necessary, records every actual attempt, and stops when human reach is confirmed or no further contact is allowed. The contact history is persistent, so the regulatory limit continues to work across separate runs.
-

@@ -7,21 +7,19 @@ Brite Spark 2026 — Problem 07
 
 ## Why this document exists
 
-We used this file as a running record of the important decisions made during the project.
-
-It is intentionally not just a technical specification. It records what we noticed, what we chose, what we rejected, and what changed when the requirements changed.
+This file records the important decisions made during development, what we observed in the supplied data, how the surprise requirement changed the design, and what we intentionally left out.
 
 ---
 
-## 1. Start with the supplied data
+## 1. Inspect the supplied data before building
 
 ### Decision
 
-Inspect the appointment and contact files before designing the reminder engine.
+Profile the appointment and contact files before designing the reminder logic.
 
 ### Why
 
-The contact data contains missing values, opt-outs, shared contact points, multiple appointments, and different languages. Designing first and inspecting later would have caused the system to make assumptions about the data.
+The data contains missing values, opt-outs, shared contact points, multiple appointments, and multiple languages. We did not want to build the system around assumptions that were not true in the data.
 
 ---
 
@@ -29,25 +27,25 @@ The contact data contains missing values, opt-outs, shared contact points, multi
 
 ### Decision
 
-Do not randomly fill missing mobile, landline, or email values. Do not use ML to invent contact details.
+Do not randomly fill missing phone numbers or emails. Do not use ML to invent contact details.
 
 ### Why
 
-A predicted contact value is not proof that it belongs to the resident. The safer and more defensible behaviour is to keep the missing value and let the policy decide what can still be done.
+A fabricated contact value is not evidence that it belongs to the resident. Missing information is therefore handled explicitly by the contact policy.
 
 ### Result
 
-Residents with no usable contact method remain in the system and receive an explicit `NO_USABLE_CONTACT` outcome.
+Residents with no usable contact method remain in the system and receive an auditable no-contact decision.
 
 ---
 
-## 3. Actual data findings
+## 3. Data findings
 
-The inspection found:
+The supplied data contains:
 
 - 940 appointments
-- 620 residents
-- 498 unique residents with appointments
+- 620 contact records
+- 498 residents with appointments
 - 14 residents with no contact information
 - 19 appointments with no contact method
 - 27 shared mobile numbers affecting 61 residents
@@ -72,27 +70,25 @@ Contact combinations:
 
 ### What happened
 
-The first profiling version looked for `YES`.
-
-The supplied data actually uses `Y/N`.
+The first inspection looked for `YES`, while the supplied data actually uses `Y/N`.
 
 ### Decision
 
-Correct the inspection logic to use:
+Interpret:
 
 ```text
 Y = opted out
 N = not opted out
 ```
 
-### Final observed values
+### Final counts
 
 - SMS opt-out: 63
 - Voice opt-out: 49
 - Email opt-out: 40
-- All three: 11
+- All-three opt-outs: 11
 
-This was rerun against the original data. The source CSV was not changed.
+The inspection was corrected and rerun against the original data. The source files were not modified.
 
 ---
 
@@ -100,40 +96,38 @@ This was rerun against the original data. The source CSV was not changed.
 
 ### Decision
 
-Create a central `ContactPolicy`.
-
-The policy is responsible for:
+Use a central `ContactPolicy` for:
 
 - quiet hours
 - opt-outs
 - usable contact methods
-- rolling regulatory contact allowance
+- rolling 2-in-7 enforcement
 
 ### Why
 
-The supplied mock channels do not enforce safety rules themselves. Having a central gate makes it harder for future code to bypass an important restriction.
+The supplied mock channels do not enforce these rules. A central policy makes the safety logic easier to test and harder to bypass.
 
 ---
 
-## 6. Treat the surprise requirement as architecture, not a patch
+## 6. Treat the surprise requirement as a core architectural rule
 
 ### Decision
 
-When the surprise requirement introduced the rolling two-contacts-in-seven-days rule, we made it a central part of the contact decision flow instead of adding a special case at the end.
+When the surprise requirement introduced a maximum of two contacts in seven days, we integrated it into the main contact decision flow instead of adding a final after-the-fact check.
 
 ### Result
 
-Every outbound attempt passes through the regulatory check.
+Every actual outbound attempt is checked against the resident's current rolling allowance.
 
 ---
 
-## 7. Per-resident rolling 7-day ledger
+## 7. Persistent per-resident 2-in-7 ledger
 
 ### Decision
 
-Track contact history by resident and timestamp.
+Keep a structured outbound contact history.
 
-The ledger stores:
+Each attempt records:
 
 - resident ID
 - appointment ID
@@ -144,23 +138,23 @@ The ledger stores:
 - detail
 - reach result
 
-### Rules
+Rules:
 
-- maximum 2 outbound contacts
-- rolling seven-day window
-- per resident
-- different appointments count together
-- different channels count together
-- failed attempts still count
+- maximum 2 outbound contacts in any rolling 7-day window
+- every actual outbound attempt counts
+- failed attempts count
+- channels count together
+- appointments count together
 - historical attempts count
+- a third outbound attempt is blocked
 
 ---
 
-## 8. Keep persistent history
+## 8. Historical contact persistence
 
 ### Decision
 
-Persist outbound attempts in:
+Persist application contact history in:
 
 ```text
 data/contact_history.jsonl
@@ -168,7 +162,9 @@ data/contact_history.jsonl
 
 ### Why
 
-The surprise requirement applies retrospectively. A purely in-memory ledger would forget yesterday's contacts after the application stopped.
+A future run needs to remember contacts from earlier runs for the retrospective rule.
+
+The history file is runtime-generated and is intentionally not tracked in Git.
 
 ---
 
@@ -176,11 +172,11 @@ The surprise requirement applies retrospectively. A purely in-memory ledger woul
 
 ### Decision
 
-Use our own structured contact history for regulatory counting.
+Use the structured application contact history for the regulatory ledger.
 
 ### Why
 
-The supplied `outbox.jsonl` contains channel-level information but does not identify the resident. Because the regulatory limit is per resident, our application must retain the resident ID with each attempt.
+The supplied channel outbox does not identify the resident in the way needed for a per-resident regulatory decision. Our contact history does.
 
 ---
 
@@ -188,20 +184,17 @@ The supplied `outbox.jsonl` contains channel-level information but does not iden
 
 ### Decision
 
-A successful delivery status is not automatically a human reach.
-
-Current rule:
+Use:
 
 ```text
-voice + answered + human -> reached
-voice + voicemail/no-answer/failure -> not confirmed
-SMS delivery -> delivery evidence only
-Email delivery -> delivery evidence only
+voice + answered + human -> confirmed human reach
 ```
+
+Do not treat SMS or email delivery as proof of human reach.
 
 ### Why
 
-We do not want the metrics to claim that somebody was reached when the channel only confirms delivery.
+The system should report only what the available channel evidence supports.
 
 ---
 
@@ -209,13 +202,20 @@ We do not want the metrics to claim that somebody was reached when the channel o
 
 ### Decision
 
-Use a controlled fallback sequence:
+Default channel order:
 
 ```text
 SMS -> Voice -> Email
 ```
 
-When the first channel does not establish confirmed human reach, the next permitted channel is considered.
+Before every outbound attempt:
+
+1. Contact Policy is checked.
+2. Shared-contact deduplication is checked.
+3. The selected channel is executed.
+4. The attempt is recorded.
+5. If human reach is not confirmed, the next permitted channel is considered.
+6. The regulatory limit is checked again before another attempt.
 
 ### Stopping conditions
 
@@ -225,18 +225,16 @@ Stop when:
 - the regulatory limit blocks the next attempt
 - no permitted channel remains
 - contact data is unavailable
-- all allowed channels have been exhausted
-
 
 ---
 
-## 11A. Language-specific reminder messages
+## 12. Language-specific reminder messages
 
 ### Decision
 
-Use the resident's recorded `language` field to select the reminder message template.
+Use the resident's recorded `language` field to select the reminder template.
 
-The supplied dataset contains these language codes:
+Supported languages in the supplied dataset:
 
 - `en` — English
 - `es` — Spanish
@@ -255,165 +253,206 @@ Supported template
 Reminder message
 ```
 
-If the language is missing or not supported:
+Missing or unknown language codes use English fallback:
 
 ```text
-Unknown / missing language
+Unknown / missing
        ↓
-English fallback
+English template
 ```
 
 ### Why
 
-The requirement is to select the correct language for the resident. We chose a deterministic template approach rather than adding a translation service or generative translation layer.
+The requirement is to select the correct language for the resident. We chose deterministic templates rather than a translation API or generative translation service.
 
-This keeps the behaviour predictable, testable, auditable, and independent of external APIs.
+This makes the behaviour:
+
+- predictable
+- testable
+- auditable
+- independent of external services
 
 We deliberately support the languages present in the supplied dataset rather than claiming universal language coverage.
 
 ### Testing
 
-Language selection is covered by automated tests for:
+Language support is covered by automated tests for:
 
 - supported-language selection
-- unknown-language fallback to English
+- unknown-language fallback
 
 ---
 
-## 12. Shared contact points
+## 13. Shared contact points
 
 ### Decision
 
-Add a run-scoped deduplicator for shared phone numbers and email addresses.
+Use run-scoped deduplication for shared phone numbers and email addresses.
 
 ### Why
 
-The supplied data contains shared contact points, so the same channel/contact point should not be unnecessarily reused within one processing run.
+The supplied data contains shared contact points, so the same contact point should not be unnecessarily reused during one processing run.
 
 ### Important distinction
 
-Deduplication does not replace the regulatory ledger.
+Deduplication is separate from the regulatory limit.
 
-The 2-in-7 rule is still counted per resident.
+The 2-in-7 count remains per resident.
 
 ---
 
-## 13. Multiple appointments
+## 14. Multiple appointments
 
 ### Decision
 
-A resident's appointments share the same regulatory contact allowance.
+A resident's appointments share the same resident-level 2-in-7 contact allowance.
 
 ### Priority
 
 When eligible appointments compete, process them deterministically:
 
-1. earliest appointment time
+1. earliest scheduled appointment
 2. appointment ID as tie-breaker
 
 ### Why
 
-This is simple, repeatable, based on operational appointment information, and does not rely on protected characteristics.
+This is repeatable, operationally understandable, and does not use protected characteristics.
 
 ---
 
-## 14. Keep current-run metrics separate from history
+## 15. Current-run metrics vs historical ledger
 
 ### Decision
 
-Metrics for a run use only contacts created during that run.
+Metrics for a run include only attempts created during that run.
 
-The persistent ledger total is shown separately.
+Historical ledger totals are displayed separately.
 
 ### Why
 
-Otherwise a second run could appear to have sent messages that were actually sent yesterday.
+Mixing previous contacts into current-run metrics makes the run's performance misleading.
 
 ---
 
-## 15. Do not overbuild the project
+## 16. Contact edge cases and treatment
 
-### Rejected or deliberately excluded
+| Edge case | What we do |
+|---|---|
+| Missing mobile | SMS is blocked; other permitted channels may be considered |
+| Missing landline | Voice can use mobile when available |
+| Missing email | Email is blocked |
+| No contact information | No outbound contact; explicit reason recorded |
+| SMS opt-out | SMS blocked by policy |
+| Voice opt-out | Voice blocked by policy |
+| Email opt-out | Email blocked by policy |
+| All three opt-outs | No permitted channel |
+| Shared mobile | Run-scoped deduplication |
+| Shared email | Run-scoped deduplication |
+| Multiple appointments | Same resident-level 2-in-7 allowance |
+| Failed outbound attempt | Counts toward 2-in-7 |
+| Historical attempt | Loaded and counts toward 2-in-7 |
+| Unknown language | English fallback |
+| Missing language | English fallback |
 
-- random/ML completion of missing contact data
-- WhatsApp integration
-- Google Calendar integration
+---
+
+## 17. Surprise retrofit — what changed
+
+Before the surprise requirement, the core system focused on:
+
+- channel selection
+- policy checks
+- fallback
+- reach classification
+- audit
+
+The surprise required us to add retrospective regulatory control.
+
+### What changed
+
+- Added persistent contact history.
+- Added rolling per-resident 2-in-7 enforcement.
+- Made every actual outbound attempt count.
+- Loaded previous contacts before each new run.
+- Added deterministic appointment priority.
+- Added audit evidence for the regulatory decision.
+- Separated current-run metrics from historical ledger totals.
+
+### What we would improve with more time
+
+- richer language templates
+- production-grade persistence
+- real provider adapters
+- stronger operational reporting
+
+---
+
+## 18. What we rejected
+
+We deliberately did not use:
+
+- random completion of missing contact information
+- ML-imputed contact details
+- deletion of residents with incomplete contact information
+- delivery-as-human-reach semantics
+- WhatsApp integration in the core build
+- Google Calendar integration in the core build
+- a large frontend/dashboard
 - real provider APIs
-- large UI/dashboard
-- appointment booking
-- rescheduling/cancellation
-- production infrastructure
 - generative message creation
 
-### Why
+---
 
-The priority was to solve the scored reminder problem reliably and make the surprise requirement auditable.
+## 19. Time-cut policy
+
+The floor requirements were prioritized before optional enhancements.
+
+Completed priority order:
+
+1. data inspection and validation
+2. models
+3. rolling contact ledger
+4. central contact policy
+5. channel service
+6. reminder orchestration
+7. fallback/stopping
+8. reach classification
+9. language selection
+10. persistent history
+11. surprise 2-in-7 rule
+12. shared-contact deduplication
+13. metrics
+14. tests
+15. real-data validation
+16. documentation and clean-clone verification
 
 ---
 
-## 16. Test-first checkpoints
+## 20. Test status
 
-We added tests alongside the main components rather than waiting until the end.
-
-The final suite covers:
-
-- data loading
-- contact ledger
-- contact policy
-- channel service
-- contact history
-- shared-contact deduplication
-- orchestrator
-- metrics
-
-Final validated result:
+Final validated automated suite:
 
 ```text
 75 tests
 OK
 ```
 
----
-
-## 17. What changed during development
-
-The project was deliberately built in small stages.
-
-Major milestones:
-
-1. data inspection
-2. models
-3. rolling contact ledger
-4. central policy
-5. channel integration
-6. reminder orchestration
-7. persistent history
-8. shared-contact deduplication
-9. metrics
-10. real-data validation
-11. documentation and cleanup
-
-Each milestone was tested before moving to the next major component.
+The suite covers data loading, ledger behaviour, policy, channels, history, deduplication, language selection, orchestration, and metrics.
 
 ---
 
-## 18. What the final system does not claim
+## 21. Final project scope
 
-The system does not claim to guarantee that an SMS or email was read.
+The solution is a deterministic reminder orchestration system around the supplied appointment/contact data and supplied mock channels.
 
-It reports what the available channel evidence actually supports.
+It does not claim to be a production messaging platform.
 
-It also does not claim to be a production messaging platform. It is a deterministic reminder decision/orchestration solution built around the supplied mock channels.
+It does not include appointment booking, rescheduling, cancellation, real external provider integration, or a large frontend.
 
 ---
 
-## 19. Future improvement
+## 22. AI usage
 
-After the required floor, the next improvements would be:
+AI was used as a development support tool for planning, implementation assistance, debugging, testing, and documentation.
 
-1. broader language coverage beyond the languages present in the supplied dataset
-2. stronger operational reporting
-3. production-grade persistence
-4. real messaging provider adapters
-
-Those are deliberately outside the core submission scope.
+See `AI-USAGE.md` for the project usage record.
